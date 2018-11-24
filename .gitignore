@@ -1,0 +1,7 @@
+.cproject
+.project
+.settings
+*.3dsx
+*.elf
+*.smdh
+build
