@@ -7,56 +7,57 @@
 
 #define THREAD_STACK_SIZE 0x1000
 
-static Thread plugin_thread;
-static plugin_ctx_t* ctx;
-static const plugin_ops_t* plugin_ops;
+static Thread pluginThread;
+static bool unloadRequest;
+static PluginContext* ctx;
+static const PluginOps* pluginOps;
 
-static void plugin_main(void* arg)
+static void TestPlugin_Main(void* arg)
 {
-	plugin_ops->print(ctx, "plugin thread...\n");
-	threadExit(0);
+	while(!unloadRequest)
+	{
+		pluginOps->print(ctx, "plugin thread...\n");
+		svcSleepThread(1000000000ULL);
+	}
 }
 
-static void plugin_load(plugin_ctx_t* context, const plugin_ops_t* ops)
+static void TestPlugin_Load(PluginContext* context, const PluginOps* ops)
 {
 	ctx = context;
-	plugin_ops = ops;
-	plugin_ops->print(ctx, "loading plugin: test\n");
+	pluginOps = ops;
+	pluginOps->print(ctx, "loading plugin: test\n");
 
-	void* mem = malloc(32u);
+	fprintf(stdout, "standard IO test\n");
 
-	if(mem == NULL)
-	{
-		plugin_ops->print(ctx, "malloc failed\n");
-	}
-
-	fprintf(stdout, "hello world\n");
-	printf("hello world\n");
+	unloadRequest = false;
 
 	s32 prio;
 	svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
-	plugin_thread = threadCreate(plugin_main, NULL, THREAD_STACK_SIZE, prio, -2, true);
+	pluginThread = threadCreate(TestPlugin_Main, NULL, THREAD_STACK_SIZE, prio, -2, true);
 }
 
-static void plugin_unload(plugin_ctx_t* ctx)
+static void TestPlugin_Unload(PluginContext* ctx)
 {
-	plugin_ops->print(ctx, "unloading plugin: test\n");
+	pluginOps->print(ctx, "unloading plugin: test\n");
+	unloadRequest = true;
+
+	threadJoin(pluginThread, UINT64_MAX);
+	threadFree(pluginThread);
+	pluginThread = NULL;
 }
 
-static void plugin_tick(plugin_ctx_t* ctx)
+static void TestPlugin_Tick(PluginContext* ctx)
 {
-	plugin_ops->print(ctx, "plugin tick\n");
+	pluginOps->print(ctx, "plugin tick\n");
 }
 
 void * _sbrk_r(struct _reent *ptr, ptrdiff_t incr)
 {
-	return plugin_ops->sbrk(ctx, incr);
+	return pluginOps->sbrk(ctx, incr);
 }
 
-__attribute__((section(".init"))) void _start(const plugin_ops_t* ctx)
-{
-
-}
+// not actually used for anything, but an entry point is required
+__attribute__((section(".init"))) void _start(void) {}
 
 DECLARE_PLUGIN(test) =
 {
@@ -65,7 +66,7 @@ DECLARE_PLUGIN(test) =
 		.name = "test",
 
 		.syscalls = &__syscalls,
-		.load = plugin_load,
-		.unload = plugin_unload,
-		.tick = plugin_tick,
+		.load = TestPlugin_Load,
+		.unload = TestPlugin_Unload,
+		.tick = TestPlugin_Tick,
 };

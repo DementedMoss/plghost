@@ -12,16 +12,16 @@
 #define PLUGIN_VER   0
 
 #define DECLARE_PLUGIN(name) \
-	static const plugin_hdr_t __plugin_##name __attribute__((section(".plugin"))) __attribute__((used))
+	static const PluginHeader __plugin_##name __attribute__((section(".plugin"))) __attribute__((used))
 
 
-typedef struct plugin_ctx plugin_ctx_t;
+typedef struct PluginContext PluginContext;
 
 typedef struct
 {
-	void*(*sbrk)(plugin_ctx_t* plugin, ptrdiff_t incr);
-	void (*print)(plugin_ctx_t* plugin, const char* message);
-} plugin_ops_t;
+	void*(*sbrk)(PluginContext* plugin, ptrdiff_t incr);
+	void (*print)(PluginContext* plugin, const char* message);
+} PluginOps;
 
 typedef struct
 {
@@ -30,10 +30,10 @@ typedef struct
 	char name[32];
 	__syscalls_t* syscalls;
 
-	void (*load)(plugin_ctx_t* ctx, const plugin_ops_t* ops);
-	void (*unload)(plugin_ctx_t* ctx);
-	void (*tick)(plugin_ctx_t* ctx);
-} plugin_hdr_t;
+	void (*load)(PluginContext* ctx, const PluginOps* ops);
+	void (*unload)(PluginContext* ctx);
+	void (*tick)(PluginContext* ctx);
+} PluginHeader;
 
 
 
