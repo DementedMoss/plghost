@@ -20,14 +20,15 @@ typedef struct
 	MemPerm perm;
 } plugin_segment_t;
 
-typedef struct plugin
+typedef struct plugin_ctx
 {
 	char file[32];
-	char name[32];
 	plugin_hdr_t* hdr;
 	plugin_segment_t segments[3];
-	struct plugin* next;
+	void* brk;
+	struct plugin_ctx* next;
 } plugin_t;
+
 
 static _3DSX_Reloc reloc_tbl[RELOCBUFSIZE];
 
@@ -63,7 +64,7 @@ static bool Plugin_LoadFrom3dsx(Handle file, plugin_t* plugin)
 
 	plugin->segments[0].size = (hdr.codeSegSize+0xFFF) &~ 0xFFF;
 	plugin->segments[1].size = (hdr.rodataSegSize+0xFFF) &~ 0xFFF;
-	plugin->segments[2].size = (hdr.dataSegSize+0xFFF) &~ 0xFFF;
+	plugin->segments[2].size = ((hdr.dataSegSize+0xFFF) &~ 0xFFF) + 0x4000u;
 
 	plugin->segments[0].perm = MEMPERM_READ | MEMPERM_EXECUTE;
 	plugin->segments[1].perm = MEMPERM_READ;
@@ -130,6 +131,8 @@ static bool Plugin_LoadFrom3dsx(Handle file, plugin_t* plugin)
 		{
 			goto failed;
 		}
+
+		plugin->brk = (uint8_t*)plugin->segments[2].buffer + ((hdr.dataSegSize+0xFFF) &~ 0xFFF);
 	}
 
 	// Clear the bss
@@ -245,15 +248,35 @@ failed:
 	return false;
 }
 
-static void plugin_print(const char* msg)
+static void* Plugin_sbrk(plugin_ctx_t* plugin, ptrdiff_t incr)
+{
+	printf("%s: sbrk (incr=%u)\n", plugin->hdr->name, incr);
+
+	if(incr != 0)
+	{
+		ptrdiff_t size = (ptrdiff_t)plugin->brk - (ptrdiff_t)plugin->segments[2].buffer;
+		size += incr;
+
+		if(size < 0 || size > plugin->segments[2].size)
+		{
+			return (void*)-1;
+		}
+
+		plugin->brk = (uint8_t*)plugin->brk + incr;
+	}
+
+	return plugin->brk;
+}
+
+static void Plugin_print(plugin_ctx_t* plugin, const char* msg)
 {
 	printf("%s", msg);
 }
 
-static const plugin_ctx_t ctx =
+static const plugin_ops_t plugin_ops =
 {
-		.syscalls = &__syscalls,
-		.print = plugin_print
+		.sbrk = Plugin_sbrk,
+		.print = Plugin_print
 };
 
 static bool Plugin_LoadFromFile(plugin_t* plugin, const char* path)
@@ -402,7 +425,8 @@ static Result Plugin_LoadPlugins(plugin_t** list)
 	{
 		printf("\t%s\n", plugin->hdr->name);
 
-		plugin->hdr->load(&ctx);
+		*plugin->hdr->syscalls = __syscalls;
+		plugin->hdr->load(plugin, &plugin_ops);
 	}
 
 	return 0;
@@ -432,7 +456,7 @@ int main(int argc, char** argv)
 		{
 			if(plugin->hdr->tick != NULL)
 			{
-				plugin->hdr->tick(&ctx);
+				plugin->hdr->tick(plugin);
 			}
 		}
 

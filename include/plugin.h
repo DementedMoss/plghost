@@ -15,21 +15,24 @@
 	static const plugin_hdr_t __plugin_##name __attribute__((section(".plugin"))) __attribute__((used))
 
 
+typedef struct plugin_ctx plugin_ctx_t;
+
 typedef struct
 {
-	const __syscalls_t* syscalls;
-	void (*print)(const char* message);
-} plugin_ctx_t;
+	void*(*sbrk)(plugin_ctx_t* plugin, ptrdiff_t incr);
+	void (*print)(plugin_ctx_t* plugin, const char* message);
+} plugin_ops_t;
 
 typedef struct
 {
 	u32 magic;
 	u32 version;
 	char name[32];
+	__syscalls_t* syscalls;
 
-	void (*load)(const plugin_ctx_t* ctx);
-	void (*unload)(const plugin_ctx_t* ctx);
-	void (*tick)(const plugin_ctx_t* ctx);
+	void (*load)(plugin_ctx_t* ctx, const plugin_ops_t* ops);
+	void (*unload)(plugin_ctx_t* ctx);
+	void (*tick)(plugin_ctx_t* ctx);
 } plugin_hdr_t;
 
 
